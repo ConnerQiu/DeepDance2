@@ -13,7 +13,7 @@
     ```
     export OMP_NUM_THREADS=1
     ```
-The current model is only able to repeatly learn a singel clip of version, but we want it to generate model accroding to the input musice. the framework of the model:
+The current model is only able to repeatly learn a singel clip of version, but we want it to generate model accroding to the input music. the framework of the model:
 
 
 
