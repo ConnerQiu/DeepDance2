@@ -92,8 +92,10 @@ def visualize(expert_traj):
             fr = (fr+1) % expert_traj.shape[0]
             t = 0
         sim.data.qpos[:] = expert_traj[fr]
-        # sim.data.qpos[2] = 0.85
+        sim.data.qpos[2] = 0.85
         sim.data.qpos[3] = 0
+        sim.data.qpos[4] = 0
+        sim.data.qpos[5] = 0
         print(sim.data.qpos[0:7])
 
         sim.forward()
@@ -106,46 +108,68 @@ def visualize(expert_traj):
     select_end = g_offset + select_end
     return select_start, select_end
 
+def frame_visulize(expert_traj, show_frames):
+    sim.data.qpos[:] = expert_traj
+    sim.data.qpos[2] = 0.85
+    sim.data.qpos[3] = 0
+    viewer = mujoco_py.MjViewer(sim)
+    viewer.cam.lookat[:2] = sim.data.qpos[:2]
+    # viewer.cam.azimuth = 45
+    viewer.cam.elevation = -8.0
+    viewer.cam.distance = 5.0
+    # viewer.cam.lookat[2] = 1.0
+    for i in range(show_frames):
+        viewer.render()
+        print(sim.data.qpos[4], i)
+
+def test_single_pose():
+    for i in range(0, 100):
+        # mujoco_poses[5*i, 0] = 0
+        # mujoco_poses[5*i, 1] = 0
+        # mujoco_poses[5*i, 2] = 0
+        # mujoco_poses[5*i, 3] = 0
+        mujoco_poses[5*i, 4] = 0.00001
+        mujoco_poses[5*i, 5] = 0.00001
+        # mujoco_poses[5*i, 6] = 0
+        
+        frame_visulize(mujoco_poses[5*i], 100)
+        print(5*i, mujoco_poses[5*i])
+        print(sim.data.qpos)
+
+def test_base_model_transalation():
+    """test the tranlation effect"""
+    #build env
+    model = mujoco_py.load_model_from_path('assets/mujoco_models/mocap_v2.xml')
+    sim = mujoco_py.MjSim(model)
+    data = sim.data
+
+    # set state
+    data = load_smpl_motion('gBR_sBM_cAll_d04_mBR0_ch02.pkl')
+    # data[0] = 0
+    # qpos = get_pose(data)
+
+    test_pose_params = set_smpl_pose(0,-5)
+    qpos = get_pose(test_pose_params)
+    qpos[0] = 0.
+    qpos[1] = 0.0
+    qpos[2] = 0.91
+    qpos[3] = 1.57
+
+    qvel = sim.data.qvel
+    set_state(qpos,qvel)
+    viewer = mujoco_py.MjViewer(sim)
+    print(viewer.sim.data.qpos)
+    print('which script')
+
+    #simulate
+    for i in range(1000000):
+        viewer.render()
 
 #test load whole dacnce motion
-smpl_tensors = load_smpl_motion('gBR_sBM_cAll_d05_mBR0_ch01.pkl')
+smpl_tensors = load_smpl_motion('gJB_sBM_cAll_d09_mJB5_ch01.pkl')
 mujoco_poses = tranlate_smpl_to_mujoco(smpl_tensors)
-# np.set_printoptions(linewidth=500, precision=4, suppress=True)
-# for i in range (mujoco_poses.shape[0]):
-#     print(mujoco_poses[i])
-
 
 model = mujoco_py.load_model_from_path('assets/mujoco_models/mocap_v2.xml')
 sim = mujoco_py.MjSim(model)
+np.set_printoptions(suppress=True)
 visualize(mujoco_poses)
-
-
-# """test the tranlation effect"""
-#  #build env
-# model = mujoco_py.load_model_from_path('assets/mujoco_models/mocap_v2.xml')
-# sim = mujoco_py.MjSim(model)
-# data = sim.data
-
-# # set state
-# data = load_smpl_motion('gBR_sBM_cAll_d04_mBR0_ch02.pkl')
-# # data[0] = 0
-# # qpos = get_pose(data)
-
-# test_pose_params = set_smpl_pose(0,-5)
-# qpos = get_pose(test_pose_params)
-# qpos[0] = 0.
-# qpos[1] = 0.0
-# qpos[2] = 0.91
-# qpos[3] = 1.57
-
-
-# qvel = sim.data.qvel
-# set_state(qpos,qvel)
-# viewer = mujoco_py.MjViewer(sim)
-# print(viewer.sim.data.qpos)
-# print('which script')
-
-# #simulate
-# for i in range(1000000):
-#     viewer.render()
-
