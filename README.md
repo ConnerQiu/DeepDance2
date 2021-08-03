@@ -14,8 +14,8 @@
     export OMP_NUM_THREADS=1
     ```
 The current model is only able to repeatly learn a singel clip of version, but we want it to generate model accroding to the input music. the framework of the model:
-![Skills](https://github.com/ConnerQiu/DeepDance2/blob/master/assets/Current_model.png)
+![Skills](https://github.com/ConnerQiu/DeepDance2/blob/master/assets/image/Current_model.png)
 
 the framework of our expected model:
 
-![Skills](https://github.com/ConnerQiu/DeepDance2/blob/master/assets/Expected_model.png)
+![Skills](https://github.com/ConnerQiu/DeepDance2/blob/master/assets/image/Expected_model.png)
