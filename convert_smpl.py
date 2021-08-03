@@ -70,8 +70,7 @@ def tranlate_smpl_to_mujoco(smpl_tensors):
         mujoco_poses[i] = get_pose(smpl_tensors[i])  
     return mujoco_poses
 
-def visualize(expert_traj):
-    global g_offset, select_start, select_end
+def visualize(expert_traj, sim):
 
     """render or select part of the clip"""
     viewer = mujoco_py.MjViewer(sim)
@@ -103,10 +102,7 @@ def visualize(expert_traj):
         viewer.render()
         if not paused:
             t += 1
-
-    select_start = g_offset + select_start
-    select_end = g_offset + select_end
-    return select_start, select_end
+    viewer.save_
 
 def frame_visulize(expert_traj, show_frames):
     sim.data.qpos[:] = expert_traj
@@ -122,8 +118,8 @@ def frame_visulize(expert_traj, show_frames):
         viewer.render()
         print(sim.data.qpos[4], i)
 
-def test_single_pose():
-    for i in range(0, 100):
+def test_single_pose(mujoco_poses, a, b):
+    for i in range(a, b):
         # mujoco_poses[5*i, 0] = 0
         # mujoco_poses[5*i, 1] = 0
         # mujoco_poses[5*i, 2] = 0
@@ -165,11 +161,24 @@ def test_base_model_transalation():
     for i in range(1000000):
         viewer.render()
 
+def translate_and_save(smpl_file, render):
+    model_folder = 'assets/aist_motion'
+    smpl_tensors = load_smpl_motion(smpl_file)
+    mujoco_poses = tranlate_smpl_to_mujoco(smpl_tensors)
+    save_path = os.path.join(model_folder,os.path.splitext(smpl_file)[0]+'.p')
+    os.makedirs(os.path.dirname(save_path), exist_ok=True)
+    pickle.dump(mujoco_poses, open(save_path,'wb'))
+    print('Successfully saved mujoco_poses to %s !.'% save_path)
+
+    if render:
+        model = mujoco_py.load_model_from_path('assets/mujoco_models/mocap_v2.xml')
+        sim = mujoco_py.MjSim(model)
+        visualize(mujoco_poses, sim)
+
+
 #test load whole dacnce motion
-smpl_tensors = load_smpl_motion('gJB_sBM_cAll_d09_mJB5_ch01.pkl')
-mujoco_poses = tranlate_smpl_to_mujoco(smpl_tensors)
+smpl_file = 'gBR_sBM_cAll_d05_mBR0_ch01.pkl'
+translate_and_save(smpl_file, True)
 
 model = mujoco_py.load_model_from_path('assets/mujoco_models/mocap_v2.xml')
 sim = mujoco_py.MjSim(model)
-np.set_printoptions(suppress=True)
-visualize(mujoco_poses)

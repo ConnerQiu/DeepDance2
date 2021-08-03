@@ -9,13 +9,13 @@ import pickle
 import time
 from scipy.linalg import cho_solve, cho_factor
 
+import utils
+
 from utils.mjviewer import MjViewer
 from utils.mujoco import get_body_qposaddr
 from utils.transformation import quaternion_from_euler
 from utils.get_expert import get_expert
 from utils.math import *
-
-
 
 DEFAULT_SIZE = 500
 
