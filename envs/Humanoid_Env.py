@@ -9,8 +9,6 @@ import pickle
 import time
 from scipy.linalg import cho_solve, cho_factor
 
-import utils
-
 from utils.mjviewer import MjViewer
 from utils.mujoco import get_body_qposaddr
 from utils.transformation import quaternion_from_euler
@@ -72,20 +70,6 @@ class HumanoidEnv:
     def seed(self, seed=None):
         self.np_random, seed = seeding.np_random(seed)
         return [seed]
-
-    def get_body_quat(self):
-        qpos = self.data.qpos.copy()
-        body_quat = [qpos[3:7]]
-        for body in self.model.body_names[1:]:
-            if body == 'root' or not body in self.body_qposaddr:
-                continue
-            start, end = self.body_qposaddr[body]
-            euler = np.zeros(3)
-            euler[:end - start] = qpos[start:end]
-            quat = quaternion_from_euler(euler[0], euler[1], euler[2])
-            body_quat.append(quat)
-        body_quat = np.concatenate(body_quat)
-        return body_quat
 
     def set_model_params(self):
         if self.cfg.action_type == 'torque' and hasattr(self.cfg, 'j_stiff'):
@@ -193,15 +177,27 @@ class HumanoidEnv:
     def get_body_com(self, body_name):
         return self.data.get_body_xpos(body_name)
 
+    def get_body_quat(self):
+        qpos = self.data.qpos.copy()
+        body_quat = [qpos[3:7]]
+        for body in self.model.body_names[1:]:
+            if body == 'root' or not body in self.body_qposaddr:
+                continue
+            start, end = self.body_qposaddr[body]
+            euler = np.zeros(3)
+            euler[:end - start] = qpos[start:end]
+            quat = quaternion_from_euler(euler[0], euler[1], euler[2])
+            body_quat.append(quat)
+        body_quat = np.concatenate(body_quat)
+        return body_quat
+
     def get_phase(self):
         ind = self.get_expert_index(self.cur_t)
         return ind / self.expert['len']
 
     def get_expert_index(self, t):
         return (self.start_ind + t) % self.expert['len'] \
-                if self.expert['meta']['cyclic'] else min(self.start_ind + t, self.expert['len'] - 1)
-
-    def get_expert_offset(self, t):
+                if self.expert['meta']['cyclic'] else min(self.start_ind + t, self.expert['len'] - 1) 
         if self.expert['meta']['cyclic']:
             n = (self.start_ind + t) // self.expert['len']
             offset = self.expert['meta']['cycle_offset'] * n

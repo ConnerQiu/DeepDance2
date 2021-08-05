@@ -35,7 +35,7 @@ class Agent:
         self.policy_net = PolicyGaussian(MLP(self.state_dim, self.cfg.policy_hsize, self.cfg.policy_htype),
                                          self.action_dim, log_std=cfg.log_std, fix_std=cfg.fix_std)
         self.value_net = Value(MLP(self.state_dim, self.cfg.value_hsize, self.cfg.value_htype))
-        model_cp = pickle.load(open('C:/Users/cq/PycharmProjects/DeepDance/dance.pkl', "rb"))
+        model_cp = pickle.load(open('C:/Users/cq/PycharmProjects/DeepDance/dance.p', "rb"))
         self.policy_net.load_state_dict(model_cp['policy_dict'])
         self.value_net.load_state_dict(model_cp['value_dict'])
 
