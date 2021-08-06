@@ -1,6 +1,7 @@
 from Cython.Utils import long_literal
 import mujoco_py
 import numpy
+numpy.set_printoptions(suppress=False)
 
 def set_state(qpos, qvel):
     old_state = sim.get_state()
@@ -8,8 +9,12 @@ def set_state(qpos, qvel):
     sim.set_state(new_state)
 
 model = mujoco_py.load_model_from_path('assets/mujoco_models/mocap_v2.xml')
+# model.opt.timestep = 0.5
+print(model.joint_names)
+
 sim = mujoco_py.MjSim(model)
 data = sim.data
+# viewer = mujoco_py.MjViewer(sim)
 
 def set_base_pos():
     qpos_base = qpos.copy()
@@ -23,15 +28,15 @@ def set_base_pos():
     qpos_base[38] = 0.7853981633974483
     return qpos_base
 
-qpos = [0., 0.,  1.,  0,  0, 0.,  -0.0,  0.,  0.,  -0.,  0.0,  0,  0.,  0.,  0.,  0.,  0.,  0.,  0.,  0.,  0.,  0.,  0.0,  0,  0.,  0.,  0.0,  0.0,  0.0,  0.,  0.,  0.,  0.,  0.,  0.,  0.,  0.,  0.,  0.]
+qpos = [0., 0.,  0.85,  0,  0, 0.,  -0.0,  0.,  0.,  -0.,  0.0,  0,  0.,  0.,  0.,  0.,  0.,  0.,  0.,  0.,  0.,  0.,  0.0,  0,  0.,  0.,  0.0,  0.0,  0.0,  0.,  0.,  0.,  0.,  0.,  0.,  0.,  0.,  0.,  0.]
 qpos_base = set_base_pos()
 
 qpos = numpy.array(qpos_base)
-print(qpos.shape)
-qvel = sim.data.qvel
 
-set_state(qpos,qvel)
-viewer = mujoco_py.MjViewer(sim)
+sim.data.qpos[:] = qpos
 
-for i in range(1000000):
-    viewer.render()
+
+for i in range(100):
+    sim.data.ctrl[3:7] = [100, 100, 100, 0.1]
+    sim.step()
+    print(sim.data.qpos)
