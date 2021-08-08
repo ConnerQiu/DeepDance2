@@ -1,6 +1,7 @@
 import time
 import math
 import pickle
+import os
 
 from typing import Union
 from utils.mytorch import to_test, to_train
@@ -35,14 +36,16 @@ class Agent:
         self.policy_net = PolicyGaussian(MLP(self.state_dim, self.cfg.policy_hsize, self.cfg.policy_htype),
                                          self.action_dim, log_std=cfg.log_std, fix_std=cfg.fix_std)
         self.value_net = Value(MLP(self.state_dim, self.cfg.value_hsize, self.cfg.value_htype))
-        model_cp = pickle.load(open('C:/Users/cq/PycharmProjects/DeepDance/dance.p', "rb"))
-        self.policy_net.load_state_dict(model_cp['policy_dict'])
-        self.value_net.load_state_dict(model_cp['value_dict'])
+        if os.path.exists(cfg.model_param_file):
+            model_cp = pickle.load(open(cfg.model_param_file, "rb"))
+            self.policy_net.load_state_dict(model_cp['policy_dict'])
+            self.value_net.load_state_dict(model_cp['value_dict'])
 
         self.custom_reward = reward_func[self.cfg.reward_id]
         self.memory = Memory()
         self.traj_cls = TrajBatch
         self.device = torch.device('cuda') if torch.cuda.is_available() else torch.device('cpu')
+        print(self.device)
 
         #other settings
         self.sample_modules = [self.policy_net]
@@ -78,7 +81,7 @@ class Agent:
             while not done:
                 #make action
                 action = self.action(state)
-                next_state, env_reward, done, info = self.env.step(action)
+                next_state, env_reward, done, info = self.env.step(action) 
 
                 #reward and other calculation
                 if self.cfg.custom_reward:

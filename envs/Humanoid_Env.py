@@ -20,6 +20,9 @@ DEFAULT_SIZE = 500
 class HumanoidEnv:
 
     def __init__(self, cfg):
+        self.cfg = cfg
+
+        #load model and create mujoco env
         if not path.exists(cfg.mujoco_model_file):
             # try the default assets path
             fullpath = path.join(Path(__file__).parent.parent, 'assets/mujoco_models', path.basename(cfg.mujoco_model_file))
@@ -31,35 +34,44 @@ class HumanoidEnv:
         self.data = self.sim.data
         self.viewer = None
         self._viewers = {}
+        self.set_model_params()
+        self.set_cam_first = set()
+
+
+        #pose related data
+        self.init_qpos = self.sim.data.qpos.ravel().copy()
+        self.init_qvel = self.sim.data.qvel.ravel().copy()
+        self.prev_qpos = None
+        self.prev_qvel = None
+        self.body_qposaddr = get_body_qposaddr(self.model)
+        self.bquat = self.get_body_quat()
+        self.prev_bquat = None
+
+        #load expert group
+        self.expert_group = pickle.load(open(cfg.motion_data_file, "rb"))
+        self.cur_expert = None
+        self.cur_expert_num = 0
+        self.load_expert(self.cur_expert_num)
+        self.start_ind = 0 if self.cfg.env_start_first else self.np_random.randint(self.cur_expert['qpos'].shape(0))
+
+        #set dim and space
         self.obs_dim = None
         self.action_space = None
         self.observation_space = None
         self.np_random = None
         self.cur_t = 0  # number of steps taken
+        self.set_spaces()
 
+        # env specific
+        self.end_reward = 0.0
+        self.start_ind = 0
+        self.seed()
         self.metadata = {
             'render.modes': ['human', 'rgb_array'],
             'video.frames_per_second': int(np.round(1.0 / self.dt))
         }
 
-        self.init_qpos = self.sim.data.qpos.ravel().copy()
-        self.init_qvel = self.sim.data.qvel.ravel().copy()
-        self.prev_qpos = None
-        self.prev_qvel = None
-        self.seed()
-
-        self.cfg = cfg
-        self.set_cam_first = set()
-        # env specific
-        self.end_reward = 0.0
-        self.start_ind = 0
-        self.body_qposaddr = get_body_qposaddr(self.model)
-        self.bquat = self.get_body_quat()
-        self.prev_bquat = None
-        self.set_model_params()
-        self.expert = None
-        self.load_expert()
-        self.set_spaces()
+        print("create successfully")
 
     #initial setup--------------
 
@@ -76,10 +88,11 @@ class HumanoidEnv:
             self.model.jnt_stiffness[1:] = self.cfg.j_stiff
             self.model.dof_damping[6:] = self.cfg.j_damp
 
-    def load_expert(self):
-        expert_qpos, expert_meta = pickle.load(open(self.cfg.expert_traj_file, "rb"))
-        # print(expert_meta)
-        self.expert = get_expert(expert_qpos, expert_meta, self)
+    def load_expert(self, expert_num):
+        expert_qpos = self.expert_group[expert_num]["qpos"]
+        expert_meta = {'dt': 0.03333333333333333, 'mocap_fr': 120, 'scale': 0.45, 'offset_z': -0.07, \
+            'cyclic': False, 'cycle_offset': 0.0, 'select_start': 0, 'select_end': 176, 'fix_feet': False, 'fix_angle': True}
+        self.cur_expert = get_expert(expert_qpos, expert_meta, self)
 
     def set_spaces(self):
         cfg = self.cfg
@@ -138,21 +151,26 @@ class HumanoidEnv:
         # transform velocity
         qvel[:3] = transform_vec(qvel[:3], qpos[3:7], self.cfg.obs_coord).ravel()
         obs = []
-        # pos
+        # cur_pos
         if self.cfg.obs_heading:
             obs.append(np.array([get_heading(qpos[3:7])]))
         if self.cfg.root_deheading:
             qpos[3:7] = de_heading(qpos[3:7])
         obs.append(qpos[2:])
-        # vel
+        # cur_vel
         if self.cfg.obs_vel == 'root':
             obs.append(qvel[:6])
         elif self.cfg.obs_vel == 'full':
             obs.append(qvel)
+        
+        #get expert pos
+        expert_qpos = self.get_expert_qpos()
+        obs.append(expert_qpos)
+
         # phase
-        if self.cfg.obs_phase:
-            phase = self.get_phase()
-            obs.append(np.array([phase]))
+        # if self.cfg.obs_phase:
+        #     phase = self.get_phase()
+        #     obs.append(np.array([phase]))
         obs = np.concatenate(obs)
         return obs
 
@@ -191,22 +209,23 @@ class HumanoidEnv:
         body_quat = np.concatenate(body_quat)
         return body_quat
 
+    def get_expert_qpos(self):
+        expert_qpos = self.cur_expert["qpos"][self.cur_t+self.start_ind+1][7:] 
+        #self.cur_t means how many steps this episode has taken; 
+        #start_ind+1 means the start pose of cur_expert. together it means the next pose it is going to learn
+        #only make the joint angles as input
+        return expert_qpos
+
+    def get_expert_index(self, t):
+        return (self.start_ind+t+1)
+
+    def get_expert_attr(self, attr, ind):
+        return self.cur_expert[attr][ind, :]
+
+    """methods to be deleted"""
     def get_phase(self):
         ind = self.get_expert_index(self.cur_t)
         return ind / self.expert['len']
-
-    def get_expert_index(self, t):
-        return (self.start_ind + t) % self.expert['len'] \
-                if self.expert['meta']['cyclic'] else min(self.start_ind + t, self.expert['len'] - 1) 
-        if self.expert['meta']['cyclic']:
-            n = (self.start_ind + t) // self.expert['len']
-            offset = self.expert['meta']['cycle_offset'] * n
-        else:
-            offset = np.zeros(2)
-        return offset
-
-    def get_expert_attr(self, attr, ind):
-        return self.expert[attr][ind, :]
 
     #env control-------------------------------
 
@@ -219,19 +238,23 @@ class HumanoidEnv:
             self.viewer = v
             self.viewer_setup(mode)
         self.viewer = old_viewer
+        print("reset successfully, current expert is no %d" % self.cur_expert_num)
         return ob
 
     def reset_model(self):
         cfg = self.cfg
-        if self.expert is not None:
-            ind = 0 if self.cfg.env_start_first else self.np_random.randint(self.expert['len'])
-            self.start_ind = ind
-            init_pose = self.expert['qpos'][ind, :].copy()
-            init_vel = self.expert['qvel'][ind, :].copy()
+        if self.cur_expert is not None:
+ 
+            ind = self.start_ind
+            init_pose = self.cur_expert['qpos'][ind, :].copy()
+            init_vel = self.cur_expert['qvel'][ind, :].copy()
+            init_pose[:7] = [0., 0., 1.0, 0., 0., 0., 0.,]
             init_pose[7:] += self.np_random.normal(loc=0.0, scale=cfg.env_init_noise, size=self.model.nq - 7)
+            # print(init_pose, "set init pose")
             self.set_state(init_pose, init_vel)
             self.bquat = self.get_body_quat()
-            self.update_expert()
+            # print(self.sim.data.qpos, "setted init pose")
+            # self.update_expert()
         else:
             init_pose = self.data.qpos
             init_pose[2] += 1.0
@@ -366,17 +389,17 @@ class HumanoidEnv:
         # do simulation
         self.do_simulation(a, self.frame_skip)
         self.cur_t += 1
-        self.bquat = self.get_body_quat()
-        self.update_expert()
+        self.bquat = self.get_body_quat() 
+        # self.update_expert()
         # get obs
         head_pos = self.get_body_com('head')
         reward = 1.0
         if cfg.env_term_body == 'head':
-            fail = self.expert is not None and head_pos[2] < self.expert['head_height_lb'] - 0.1
+            fail = self.cur_expert is not None and head_pos[2] < self.cur_expert['head_height_lb'] - 0.1
         else:
-            fail = self.expert is not None and self.data.qpos[2] < self.expert['height_lb'] - 0.1
-        cyclic = self.expert['meta']['cyclic']
-        end =  (cyclic and self.cur_t >= cfg.env_episode_len) or (not cyclic and self.cur_t + self.start_ind >= self.expert['len'] + cfg.env_expert_trail_steps)
+            fail = self.cur_expert is not None and self.data.qpos[2] < self.cur_expert['height_lb'] - 0.1
+        cyclic = self.cur_expert['meta']['cyclic']
+        end =  (cyclic and self.cur_t >= cfg.env_episode_len) or (not cyclic and self.cur_t + self.start_ind >= self.cur_expert['len'] + cfg.env_expert_trail_steps)
         done = fail or end
         obs = self.get_obs()
         return obs, reward, done, {'fail': fail, 'end': end}

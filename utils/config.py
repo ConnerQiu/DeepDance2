@@ -7,28 +7,23 @@ from utils.tools import recreate_dirs
 
 class Config:
 
-    def __init__(self, cfg_id, test, create_dirs=False, cfg_dict=None) -> object:
-        self.id = cfg_id
-        if cfg_dict is not None:
-            cfg = cfg_dict
-        else:
-            cfg_path = 'cfg/**/%s.yml' % cfg_id
-            files = glob.glob(cfg_path, recursive=True)
-            assert(len(files) == 1)
-            cfg = yaml.safe_load(open(files[0], 'r'))
+    def __init__(self, cfg_path, experiment_name,test = False) -> object:
+
+        #load yaml file
+        files = glob.glob(cfg_path, recursive=True)
+        assert(len(files) == 1)
+        cfg = yaml.safe_load(open(files[0], 'r'))
+
         # create dirs
         base_dir = '/tmp' if test else 'results'
-        self.base_dir = os.path.expanduser(base_dir)
-
-        self.cfg_dir = '%s/motion_im/%s' % (self.base_dir, cfg_id)
-        self.model_dir = '%s/models' % self.cfg_dir
-        self.result_dir = '%s/results' % self.cfg_dir
-        self.log_dir = '%s/log' % self.cfg_dir
-        self.tb_dir = '%s/tb' % self.cfg_dir
-        self.video_dir = '%s/videos' % self.cfg_dir
+        self.base_dir = '%s/%s' % (base_dir, experiment_name)
+        self.model_dir = '%s/models' % self.base_dir
+        self.result_dir = '%s/results' % self.base_dir
+        self.log_dir = '%s/log' % self.base_dir
+        self.tb_dir = '%s/tb' % self.base_dir
+        self.video_dir = '%s/videos' % self.base_dir
         os.makedirs(self.model_dir, exist_ok=True)
-        if create_dirs:
-            recreate_dirs(self.log_dir, self.tb_dir)
+
 
         # expert
         self.motion_id = cfg['motion_id']
@@ -79,7 +74,7 @@ class Config:
         # env config
         self.mujoco_model_file = '%s.xml' % cfg['mujoco_model']
         self.vis_model_file = '%s.xml' % cfg['vis_model']
-        self.env_start_first = cfg.get('env_start_first', False)
+        self.env_start_first = cfg.get('env_start_first', True)
         self.env_init_noise = cfg.get('env_init_noise', 0.0)
         self.env_episode_len = cfg.get('env_episode_len', 200)
         self.env_term_body = cfg.get('env_term_body', 'head')
@@ -107,7 +102,7 @@ class Config:
             self.jkp, self.jkd, self.a_ref, self.a_scale, self.torque_lim = jparam[1:6]
             self.a_ref = np.deg2rad(self.a_ref)
             jkp_multiplier = cfg.get('jkp_multiplier', 1.0)
-            jkd_multiplier = cfg.get('jkd_multiplier', jkp_multiplier)
+            jkd_multiplier = cfg.get('jkd_multiplier', jkp_multiplier) 
             self.jkp *= jkp_multiplier
             self.jkd *= jkd_multiplier
             torque_limit_multiplier = cfg.get('torque_limit_multiplier', 1.0)

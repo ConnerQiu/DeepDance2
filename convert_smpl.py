@@ -7,9 +7,8 @@ import copy
 
 """load pose data from smpl file"""
 def load_smpl_motion(motion_file):
-    motion_path = 'C:/Users/cq/AIST_data/AIST_annotation/motions'
-    file_path = os.path.join(motion_path, motion_file)
-    f = open(file_path, 'rb')
+
+    f = open(motion_file, 'rb')
     full_data = pickle.load(f)
     pose_data = full_data['smpl_poses']
     position_data = full_data['smpl_trans']
@@ -177,8 +176,32 @@ def translate_and_save(smpl_file, render):
 
 
 #test load whole dacnce motion
-smpl_file = 'gBR_sBM_cAll_d05_mBR0_ch01.pkl'
-translate_and_save(smpl_file, True)
+# smpl_file = 'gBR_sBM_cAll_d05_mBR0_ch01.pkl'
+# translate_and_save(smpl_file, True)
 
-model = mujoco_py.load_model_from_path('assets/mujoco_models/mocap_v2.xml')
-sim = mujoco_py.MjSim(model)
+# model = mujoco_py.load_model_from_path('assets/mujoco_models/mocap_v2.xml')
+# sim = mujoco_py.MjSim(model)
+
+def translate_expert_group(save_name):
+    model_folder = r'C:\Users\cq\AIST_data\AIST_annotation\motions'
+    motion_list = os.listdir(model_folder)
+    expert_group = []
+    for motion_name in motion_list[0:9]:
+        smpl_file = os.path.join(model_folder,motion_name)
+        smpl_tensors = load_smpl_motion(smpl_file)
+        mujoco_poses = tranlate_smpl_to_mujoco(smpl_tensors)
+        expert = {}
+        expert["qpos"] = mujoco_poses
+        expert["name"] = motion_name
+        expert_group.append(expert)
+
+    save_path = "assets/aist_motion/"+save_name+".pkl"
+    print(save_path)
+    os.makedirs(os.path.dirname(save_path), exist_ok=True)
+    pickle.dump(expert_group, open(save_path,'wb'))
+    print('Successfully saved mujoco_poses to %s !.'% save_path)
+
+translate_expert_group("d04_mBR0")
+
+full_data = pickle.load(open("assets/aist_motion/test.pkl", 'rb'))
+print(full_data[7]["name"])
