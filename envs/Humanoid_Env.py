@@ -115,6 +115,16 @@ class HumanoidEnv:
         low = -high
         self.observation_space = spaces.Box(low, high, dtype=np.float32)
 
+    def render(self, mode='human', width=DEFAULT_SIZE, height=DEFAULT_SIZE):
+        if mode == 'image':
+            self._get_viewer(mode).render(width, height)
+            # window size used for old mujoco-py:
+            data = self._get_viewer(mode).read_pixels(width, height, depth=False)
+            # original image is upside-down, so flip it, and the image format is BGR for OpenCV
+            return data[::-1, :, [2, 1, 0]]
+        elif mode == 'human':
+            self._get_viewer(mode).render()
+
     def viewer_setup(self, mode):
         self.viewer.cam.trackbodyid = 1
         self.viewer.cam.lookat[:2] = self.data.qpos[:2]
@@ -238,7 +248,7 @@ class HumanoidEnv:
             self.viewer = v
             self.viewer_setup(mode)
         self.viewer = old_viewer
-        print("reset successfully, current expert is no %d" % self.cur_expert_num)
+        # print("reset successfully, current expert is no %d" % self.cur_expert_num)
         return ob
 
     def reset_model(self):
@@ -248,7 +258,7 @@ class HumanoidEnv:
             ind = self.start_ind
             init_pose = self.cur_expert['qpos'][ind, :].copy()
             init_vel = self.cur_expert['qvel'][ind, :].copy()
-            init_pose[:7] = [0., 0., 1.0, 0., 0., 0., 0.,]
+            init_pose[:7] = [0., 0., 0.85, 0., 0., 0., 0.,]
             init_pose[7:] += self.np_random.normal(loc=0.0, scale=cfg.env_init_noise, size=self.model.nq - 7)
             # print(init_pose, "set init pose")
             self.set_state(init_pose, init_vel)
@@ -285,15 +295,7 @@ class HumanoidEnv:
         for _ in range(n_frames):
             self.sim.step()
 
-    def render(self, mode='human', width=DEFAULT_SIZE, height=DEFAULT_SIZE):
-        if mode == 'image':
-            self._get_viewer(mode).render(width, height)
-            # window size used for old mujoco-py:
-            data = self._get_viewer(mode).read_pixels(width, height, depth=False)
-            # original image is upside-down, so flip it, and the image format is BGR for OpenCV
-            return data[::-1, :, [2, 1, 0]]
-        elif mode == 'human':
-            self._get_viewer(mode).render()
+
 
     def close(self):
         if self.viewer is not None:

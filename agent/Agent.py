@@ -40,6 +40,7 @@ class Agent:
             model_cp = pickle.load(open(cfg.model_param_file, "rb"))
             self.policy_net.load_state_dict(model_cp['policy_dict'])
             self.value_net.load_state_dict(model_cp['value_dict'])
+            print("load params succesfully")
 
         self.custom_reward = reward_func[self.cfg.reward_id]
         self.memory = Memory()
@@ -63,13 +64,14 @@ class Agent:
         self.clip_epsilon = 0.2
         self.policy_grad_clip = [(self.policy_net.parameters(), 40)]
 
-        # self.noise_rate = 1.0
+        self.noise_rate = 1.0
 
     def action(self, state):
         state_var = tensor(state, dtype=torch.float32).unsqueeze(0)
         trans_out = self.trans_policy(state_var)
         mean_action = self.mean_action or self.env.np_random.binomial(1, 1 - self.noise_rate)
         action = self.policy_net.select_action(trans_out, mean_action)[0].detach().numpy()
+        action += np.round(np.random.normal(0., 0.1, size=(action.shape)),6)
         action = int(action) if self.policy_net.type == 'discrete' else action.astype(np.float64)
         return action
 
@@ -96,9 +98,16 @@ class Agent:
                 #save memory and transfer state
                 self.push_memory(state, action, mask, next_state, reward, exp)
                 state = next_state
-            if i%100==0: print('episode %d trained' % (i))
-        print('Total reward of this 200 episode is %d'%(total_episode_reward))
+
+                #render GUI
+                if self.cfg.render:
+                    self.env.render()
+
+            if i%100==0: print('"%d steps have survived in episode %d' % (self.env.cur_t, i))
+
+        print('Total reward of this %d episode is %d'%(sample_size, total_episode_reward))
         traj_batch = self.traj_cls(self.memory)
+        
         self.meory = Memory()
         return traj_batch
 
@@ -117,6 +126,8 @@ class Agent:
         rewards = torch.from_numpy(batch.rewards).to(self.dtype).to(self.device)
         masks = torch.from_numpy(batch.masks).to(self.dtype).to(self.device)
         exps = torch.from_numpy(batch.exps).to(self.dtype).to(self.device)
+        print("i am here", self.device)
+        self.value_net.to(self.device)
         with to_test(*self.update_modules):
             with torch.no_grad():
                 values = self.value_net(self.trans_value(states))
