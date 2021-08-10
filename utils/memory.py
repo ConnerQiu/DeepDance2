@@ -19,6 +19,9 @@ class Memory(object):
     def append(self, new_memory):
         self.memory += new_memory.memory
 
+    def empty_cache(self):
+        self.memory = []
+
     def __len__(self):
         return len(self.memory)
 

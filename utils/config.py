@@ -15,6 +15,7 @@ class Config:
         cfg = yaml.safe_load(open(files[0], 'r'))
 
         # create dirs
+        self.test = test
         base_dir = '/tmp' if test else 'results'
         self.base_dir = '%s/%s' % (base_dir, experiment_name)
         self.model_dir = '%s/models' % self.base_dir
@@ -74,7 +75,7 @@ class Config:
         # env config
         self.mujoco_model_file = '%s.xml' % cfg['mujoco_model']
         self.vis_model_file = '%s.xml' % cfg['vis_model']
-        self.env_start_first = cfg.get('env_start_first', True)
+        self.env_start_first = cfg.get('env_start_first', False)
         self.env_init_noise = cfg.get('env_init_noise', 0.0)
         self.env_episode_len = cfg.get('env_episode_len', 200)
         self.env_term_body = cfg.get('env_term_body', 'head')

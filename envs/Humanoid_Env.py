@@ -36,6 +36,8 @@ class HumanoidEnv:
         self._viewers = {}
         self.set_model_params()
         self.set_cam_first = set()
+        self.np_random = None
+        self.seed()
 
 
         #pose related data
@@ -52,20 +54,20 @@ class HumanoidEnv:
         self.cur_expert = None
         self.cur_expert_num = 0
         self.load_expert(self.cur_expert_num)
-        self.start_ind = 0 if self.cfg.env_start_first else self.np_random.randint(self.cur_expert['qpos'].shape(0))
+
 
         #set dim and space
         self.obs_dim = None
         self.action_space = None
         self.observation_space = None
-        self.np_random = None
+        self.start_ind = 0
+
         self.cur_t = 0  # number of steps taken
         self.set_spaces()
 
         # env specific
         self.end_reward = 0.0
-        self.start_ind = 0
-        self.seed()
+
         self.metadata = {
             'render.modes': ['human', 'rgb_array'],
             'video.frames_per_second': int(np.round(1.0 / self.dt))
@@ -81,6 +83,7 @@ class HumanoidEnv:
 
     def seed(self, seed=None):
         self.np_random, seed = seeding.np_random(seed)
+        # print(self.np_random)
         return [seed]
 
     def set_model_params(self):
@@ -88,11 +91,16 @@ class HumanoidEnv:
             self.model.jnt_stiffness[1:] = self.cfg.j_stiff
             self.model.dof_damping[6:] = self.cfg.j_damp
 
-    def load_expert(self, expert_num):
+    def covert_expert(self, expert_num):
+
         expert_qpos = self.expert_group[expert_num]["qpos"]
         expert_meta = {'dt': 0.03333333333333333, 'mocap_fr': 120, 'scale': 0.45, 'offset_z': -0.07, \
             'cyclic': False, 'cycle_offset': 0.0, 'select_start': 0, 'select_end': 176, 'fix_feet': False, 'fix_angle': True}
         self.cur_expert = get_expert(expert_qpos, expert_meta, self)
+        # if the expert group is only qpos, need this function to convert the expert to a proper structure
+
+    def load_expert(self, expert_num):
+        self.cur_expert = self.expert_group[expert_num]
 
     def set_spaces(self):
         cfg = self.cfg
@@ -220,14 +228,23 @@ class HumanoidEnv:
         return body_quat
 
     def get_expert_qpos(self):
-        expert_qpos = self.cur_expert["qpos"][self.cur_t+self.start_ind+1][7:] 
+        cur_index = self.get_expert_index(self.cur_t)
+        expert_qpos = self.cur_expert["qpos"][cur_index][7:] 
         #self.cur_t means how many steps this episode has taken; 
         #start_ind+1 means the start pose of cur_expert. together it means the next pose it is going to learn
         #only make the joint angles as input
         return expert_qpos
 
+    def get_expert_qpos_test(self):
+        cur_index = self.get_expert_index(self.cur_t)
+        expert_qpos = self.cur_expert["qpos"][cur_index][:] 
+        #self.cur_t means how many steps this episode has taken; 
+        #start_ind+1 means the start pose of cur_expert. together it means the next pose it is going to learn
+        #only make the joint angles as input
+        return expert_qpos    
+
     def get_expert_index(self, t):
-        return (self.start_ind+t+1)
+        return ((self.start_ind+t+1) % self.cur_expert['len'])
 
     def get_expert_attr(self, attr, ind):
         return self.cur_expert[attr][ind, :]
@@ -242,6 +259,8 @@ class HumanoidEnv:
     def reset(self):
         self.sim.reset()
         self.cur_t = 0
+        self.cur_expert_num = 4
+        self.load_expert(self.cur_expert_num)
         ob = self.reset_model()
         old_viewer = self.viewer
         for mode, v in self._viewers.items():
@@ -252,10 +271,12 @@ class HumanoidEnv:
         return ob
 
     def reset_model(self):
+        self.start_ind = 0 if self.cfg.env_start_first else self.np_random.randint(self.cur_expert['len'])
         cfg = self.cfg
         if self.cur_expert is not None:
  
             ind = self.start_ind
+            # print("start from pose %d" % ind)
             init_pose = self.cur_expert['qpos'][ind, :].copy()
             init_vel = self.cur_expert['qvel'][ind, :].copy()
             init_pose[:7] = [0., 0., 0.85, 0., 0., 0., 0.,]

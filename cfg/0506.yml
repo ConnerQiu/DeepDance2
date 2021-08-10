@@ -26,6 +26,7 @@ max_iter_num: 2000
 seed: 1
 save_model_interval: 100
 reward_id: 'local_rfc_implicit'
+action_type: 'torque'
 reward_weights:
   w_p: 0.5
   w_v: 0.0

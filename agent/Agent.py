@@ -30,12 +30,16 @@ class Agent:
         self.cfg = cfg
         self.actuators = env.model.actuator_names
         self.state_dim = env.observation_space.shape[0]
-        self.action_dim = env.action_space.shape[0]
+        self.action_dim = env.action_space.shape[0]-6
 
         #set sample params: network, reward function, memory and device
+        self.device = torch.device('cuda') if torch.cuda.is_available() else torch.device('cpu')
+        print("traing with %s" % self.device)
         self.policy_net = PolicyGaussian(MLP(self.state_dim, self.cfg.policy_hsize, self.cfg.policy_htype),
                                          self.action_dim, log_std=cfg.log_std, fix_std=cfg.fix_std)
         self.value_net = Value(MLP(self.state_dim, self.cfg.value_hsize, self.cfg.value_htype))
+
+
         if os.path.exists(cfg.model_param_file):
             model_cp = pickle.load(open(cfg.model_param_file, "rb"))
             self.policy_net.load_state_dict(model_cp['policy_dict'])
@@ -45,8 +49,7 @@ class Agent:
         self.custom_reward = reward_func[self.cfg.reward_id]
         self.memory = Memory()
         self.traj_cls = TrajBatch
-        self.device = torch.device('cuda') if torch.cuda.is_available() else torch.device('cpu')
-        print(self.device)
+
 
         #other settings
         self.sample_modules = [self.policy_net]
@@ -54,15 +57,16 @@ class Agent:
         self.render = False
         self.gamma = self.cfg.gamma
         self.tau = 0.95
-        self.opt_num_epochs = 1
+        self.opt_num_epochs = 5
         self.use_mini_batch = False
         self.dtype = torch.float32
         self.mean_action = True
-        self.value_opt_niter = 1
+        self.value_opt_niter = 5
         self.optimizer_policy = torch.optim.Adam(self.policy_net.parameters(), lr=self.cfg.policy_lr, weight_decay=self.cfg.policy_weightdecay)
         self.optimizer_value = torch.optim.Adam(self.value_net.parameters(), lr=self.cfg.value_lr, weight_decay=self.cfg.value_weightdecay)
         self.clip_epsilon = 0.2
         self.policy_grad_clip = [(self.policy_net.parameters(), 40)]
+        self.mini_batch_size = 2048
 
         self.noise_rate = 1.0
 
@@ -71,11 +75,12 @@ class Agent:
         trans_out = self.trans_policy(state_var)
         mean_action = self.mean_action or self.env.np_random.binomial(1, 1 - self.noise_rate)
         action = self.policy_net.select_action(trans_out, mean_action)[0].detach().numpy()
-        action += np.round(np.random.normal(0., 0.1, size=(action.shape)),6)
+        # action += np.round(np.random.normal(0., 0.1, size=(action.shape)),6)
         action = int(action) if self.policy_net.type == 'discrete' else action.astype(np.float64)
         return action
 
     def sample(self, sample_size):
+
         total_episode_reward = 0
         for i in range(sample_size):
             state = self.env.reset()
@@ -83,6 +88,7 @@ class Agent:
             while not done:
                 #make action
                 action = self.action(state)
+                # print(action)
                 next_state, env_reward, done, info = self.env.step(action) 
 
                 #reward and other calculation
@@ -102,13 +108,15 @@ class Agent:
                 #render GUI
                 if self.cfg.render:
                     self.env.render()
-
+            
+            self.env.cur_expert_num = (self.env.cur_expert_num+1)%len(self.env.expert_group)
             if i%100==0: print('"%d steps have survived in episode %d' % (self.env.cur_t, i))
 
         print('Total reward of this %d episode is %d'%(sample_size, total_episode_reward))
+        print("memory size is %d" % len(self.memory))
+ 
         traj_batch = self.traj_cls(self.memory)
-        
-        self.meory = Memory()
+        self.memory.empty_cache()
         return traj_batch
 
     def trans_policy(self, states):
@@ -119,6 +127,8 @@ class Agent:
         self.memory.push(state, action, mask, next_state, reward, exp)
 
     def update_params(self, batch):
+        self.value_net.to(self.device)
+        self.policy_net.to(self.device)
         t0 = time.time()
         to_train(*self.update_modules)
         states = torch.from_numpy(batch.states).to(self.dtype).to(self.device)
@@ -126,18 +136,19 @@ class Agent:
         rewards = torch.from_numpy(batch.rewards).to(self.dtype).to(self.device)
         masks = torch.from_numpy(batch.masks).to(self.dtype).to(self.device)
         exps = torch.from_numpy(batch.exps).to(self.dtype).to(self.device)
-        print("i am here", self.device)
-        self.value_net.to(self.device)
+        print("transfer successfuly", len(self.memory))
+        
         with to_test(*self.update_modules):
             with torch.no_grad():
                 values = self.value_net(self.trans_value(states))
 
         """get advantage estimation from the trajectories"""
         advantages, returns = self.estimate_advantages(rewards, masks, values, self.gamma, self.tau)
-        print('calculate advantages successful!')
 
         self.update_policy(states, actions, returns, advantages, exps)
-        print('training done!')
+
+        self.policy_net.to(torch.device("cpu"))
+
 
         return time.time() - t0
     
@@ -177,8 +188,12 @@ class Agent:
         with to_test(*self.update_modules):
             with torch.no_grad():
                 fixed_log_probs = self.policy_net.get_log_prob(self.trans_policy(states), actions)
-
+        start_time = time.time()
         for _ in range(self.opt_num_epochs):
+            if _ % 10 ==0 and _ > 1:
+                training_time = time.time()-start_time
+                print("train %d epochs, last 10 epochs take %d seconds" % (_, training_time))
+                start_time = time.time()
             if self.use_mini_batch:
                 perm = np.arange(states.shape[0])
                 np.random.shuffle(perm)
