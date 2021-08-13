@@ -279,7 +279,7 @@ class HumanoidEnv:
             # print("start from pose %d" % ind)
             init_pose = self.cur_expert['qpos'][ind, :].copy()
             init_vel = self.cur_expert['qvel'][ind, :].copy()
-            init_pose[:7] = [0., 0., 0.85, 0., 0., 0., 0.,]
+            init_pose[:7] = [0., 0., 0.85, 0., 0., 0., 0.,] #confirm the impact
             init_pose[7:] += self.np_random.normal(loc=0.0, scale=cfg.env_init_noise, size=self.model.nq - 7)
             # print(init_pose, "set init pose")
             self.set_state(init_pose, init_vel)
