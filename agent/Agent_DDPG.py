@@ -48,9 +48,9 @@ class Agent_DDPG:
     def trans_policy(self, state):
         return state
 
-    def sample_worker(self, pid, queue, thread_batch_size):
+    def sample_worker(self, queue):
         print('it is just a test, from prcess %d' % pid)
-        queue.put([pid, thread_batch_size,time.time()])
+        # queue.put([pid, thread_batch_size,time.time()])
 
     def sample_worker_back(self, pid, queue, thread_batch_size):
         torch.randn(pid)
@@ -89,19 +89,19 @@ class Agent_DDPG:
             process_list = []
             memories = [None] * self.num_threads
             for i in range(self.num_threads-1):
-                worker_args = (i+1, queue, thread_batch_size)
-                worker = multiprocessing.Process(target=self.sample_worker, args=worker_args)
+                # worker_args = (i+1, queue, thread_batch_size)
+                worker = multiprocessing.Process(target=self.sample_worker, args=(queue,))
                 worker.start()
                 process_list.append(worker)
             
             for i in process_list:
                 worker.join()
-            memories[0] = self.sample_worker(0, None, thread_batch_size)
+            # memories[0] = self.sample_worker(0, None, thread_batch_size)
 
-            for i in range(self.num_threads-1):
-                pin, worker_memory = queue.get()
-                memories[pid] = worker_memory
-            # traj_batch = self.traj_cls(memories)
+            # for i in range(self.num_threads-1):
+            #     pin, worker_memory = queue.get()
+            #     memories[pid] = worker_memory
+            # # traj_batch = self.traj_cls(memories)
         sample_time = time.time()-start_time
         print('sample end, takes %d seconds in total' % sample_time)
 
